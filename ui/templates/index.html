@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HR 피드백 보조 AI</title>
+  <style>
+    /* ── 기본 레이아웃 ─────────────────────────────── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white; padding: 16px 28px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    header h1 { font-size: 1.3rem; font-weight: 600; }
+    header .subtitle { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+    /* ── 직원 선택 카드 ────────────────────────────── */
+    .select-card {
+      background: white; border-radius: 12px; padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 24px;
+    }
+    .select-card h2 { font-size: 1rem; color: #555; margin-bottom: 16px; }
+    .emp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+
+    .emp-btn {
+      border: 2px solid #e8ecf0; border-radius: 10px; padding: 14px 12px;
+      background: white; cursor: pointer; text-align: left;
+      transition: all 0.2s; position: relative;
+    }
+    .emp-btn:hover { border-color: #4a90e2; background: #f0f6ff; transform: translateY(-2px); }
+    .emp-btn.selected { border-color: #4a90e2; background: #e8f0ff; }
+    .emp-btn .emp-name { font-weight: 600; font-size: 1rem; }
+    .emp-btn .emp-role { font-size: 0.75rem; color: #888; margin-top: 4px; }
+    .emp-btn .emp-level {
+      position: absolute; top: 10px; right: 10px;
+      background: #4a90e2; color: white;
+      font-size: 0.65rem; padding: 2px 6px; border-radius: 4px;
+    }
+
+    .start-btn {
+      margin-top: 16px; padding: 12px 32px;
+      background: linear-gradient(135deg, #4a90e2, #357abd);
+      color: white; border: none; border-radius: 8px;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .start-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(74,144,226,0.4); }
+    .start-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ── 진행 상황 바 ──────────────────────────────── */
+    .progress-card {
+      background: white; border-radius: 12px; padding: 20px 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 24px;
+      display: none;
+    }
+    .progress-card.visible { display: block; }
+    .progress-steps { display: flex; gap: 0; margin-top: 16px; }
+
+    .step {
+      flex: 1; text-align: center; position: relative; padding-bottom: 8px;
+    }
+    .step::before {
+      content: ''; position: absolute; top: 16px; left: 50%; right: -50%;
+      height: 2px; background: #e0e0e0; z-index: 0;
+    }
+    .step:last-child::before { display: none; }
+    .step.active::before, .step.done::before { background: #4a90e2; }
+
+    .step-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #e0e0e0; margin: 0 auto 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 700; color: #999;
+      position: relative; z-index: 1; transition: all 0.3s;
+    }
+    .step.active .step-dot { background: #4a90e2; color: white; animation: pulse 1.2s infinite; }
+    .step.done .step-dot { background: #27ae60; color: white; }
+    .step.waiting .step-dot { background: #f39c12; color: white; }
+
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(74,144,226,0.4); } 50% { box-shadow: 0 0 0 8px rgba(74,144,226,0); } }
+
+    .step-label { font-size: 0.75rem; color: #666; }
+    .step.active .step-label { color: #4a90e2; font-weight: 600; }
+    .step.done .step-label { color: #27ae60; }
+
+    .progress-log {
+      margin-top: 16px; background: #1a1a2e; color: #00d2aa;
+      border-radius: 8px; padding: 12px 16px;
+      font-family: 'Consolas', monospace; font-size: 0.8rem;
+      max-height: 100px; overflow-y: auto;
+    }
+    .progress-log .log-line { margin: 2px 0; }
+    .progress-log .log-line.error { color: #ff6b6b; }
+
+    /* ── Human Gate 배너 ────────────────────────────── */
+    .human-gate-banner {
+      background: linear-gradient(135deg, #fff3cd, #ffeeba);
+      border: 2px solid #ffc107; border-radius: 12px;
+      padding: 20px 24px; margin-bottom: 24px; display: none;
+    }
+    .human-gate-banner.visible { display: block; }
+    .human-gate-banner h3 { color: #856404; margin-bottom: 8px; font-size: 1rem; }
+    .human-gate-banner p { color: #664d03; font-size: 0.88rem; margin-bottom: 16px; }
+    .gate-actions { display: flex; gap: 12px; }
+
+    .approve-btn {
+      padding: 10px 24px; background: #27ae60; color: white;
+      border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .approve-btn:hover { background: #219a52; }
+
+    .recheck-btn {
+      padding: 10px 24px; background: #4a90e2; color: white;
+      border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; margin-top: 20px;
+    }
+    .recheck-btn:hover { background: #3a7bc8; }
+    .recheck-btn:disabled { background: #ccc; cursor: not-allowed; }
+    .recheck-hint { font-size: 0.8rem; color: #888; margin-top: 8px; }
+
+    /* ── 결과 탭 영역 ──────────────────────────────── */
+    .tabs-card {
+      background: white; border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08); display: none;
+    }
+    .tabs-card.visible { display: block; }
+
+    .tab-header { display: flex; border-bottom: 2px solid #f0f0f0; padding: 0 8px; }
+    .tab-btn {
+      padding: 14px 20px; border: none; background: none; cursor: pointer;
+      font-size: 0.9rem; color: #888; border-bottom: 3px solid transparent;
+      margin-bottom: -2px; transition: all 0.2s; position: relative;
+    }
+    .tab-btn:hover { color: #4a90e2; }
+    .tab-btn.active { color: #4a90e2; border-bottom-color: #4a90e2; font-weight: 600; }
+
+    .tab-badge {
+      display: inline-block; background: #e74c3c; color: white;
+      font-size: 0.65rem; padding: 1px 5px; border-radius: 8px;
+      margin-left: 5px; vertical-align: middle;
+    }
+    .tab-badge.green { background: #27ae60; }
+
+    .tab-panel { padding: 24px; display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── 탭1: 통합 요약 ────────────────────────────── */
+    .timeline { display: flex; flex-direction: column; gap: 0; }
+    .timeline-item {
+      display: flex; gap: 20px; padding: 16px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .timeline-item:last-child { border-bottom: none; }
+    .quarter-badge {
+      min-width: 48px; height: 48px; border-radius: 10px;
+      background: #4a90e2; color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+    }
+    .quarter-badge.missing { background: #bbb; }
+    .quarter-content h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
+    .quarter-content ul { list-style: none; }
+    .quarter-content li::before { content: "• "; color: #4a90e2; }
+    .quarter-content li { font-size: 0.85rem; color: #555; margin-bottom: 3px; }
+
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .summary-box {
+      background: #f8f9ff; border-radius: 10px; padding: 16px;
+      border-left: 4px solid #4a90e2;
+    }
+    .summary-box.competency { border-left-color: #27ae60; }
+    .summary-box h4 { font-size: 0.8rem; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-box p { font-size: 0.88rem; line-height: 1.6; }
+
+    .kpi-bar-list { display: flex; flex-direction: column; gap: 8px; }
+    .kpi-bar-item { }
+    .kpi-bar-header { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px; }
+    .kpi-bar-track { background: #e8ecf0; border-radius: 4px; height: 8px; }
+    .kpi-bar-fill { height: 8px; border-radius: 4px; background: #4a90e2; transition: width 0.8s ease; }
+    .kpi-bar-fill.over { background: #27ae60; }
+    .kpi-bar-fill.under { background: #e74c3c; }
+
+    /* ── 탭2: 피드백 초안 ──────────────────────────── */
+    .draft-section { margin-bottom: 24px; }
+    .draft-section h3 {
+      font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
+      color: #888; margin-bottom: 10px;
+    }
+    .draft-textarea {
+      width: 100%; min-height: 140px; padding: 14px;
+      border: 2px solid #e8ecf0; border-radius: 8px;
+      font-family: inherit; font-size: 0.9rem; line-height: 1.7;
+      resize: vertical; transition: border-color 0.2s;
+    }
+    .draft-textarea:focus { outline: none; border-color: #4a90e2; }
+
+    .grade-row { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .grade-badge {
+      font-size: 2rem; font-weight: 800; color: #4a90e2;
+      background: #e8f0ff; padding: 8px 20px; border-radius: 10px;
+    }
+    .grade-rationale { font-size: 0.85rem; color: #666; line-height: 1.5; flex: 1; }
+
+    .tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .tag {
+      background: #f0f4ff; color: #4a90e2; padding: 4px 12px;
+      border-radius: 20px; font-size: 0.8rem; border: 1px solid #d0e0ff;
+    }
+    .tag.growth { background: #fff8f0; color: #e67e22; border-color: #ffd0a0; }
+
+    /* ── 탭3: 품질 체크 ────────────────────────────── */
+    .checker-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .checker-card {
+      border-radius: 10px; padding: 16px;
+      border: 2px solid #e8ecf0;
+    }
+    .checker-card.passed { border-color: #27ae60; background: #f0fff4; }
+    .checker-card.warning { border-color: #f39c12; background: #fffbf0; }
+    .checker-card.critical { border-color: #e74c3c; background: #fff5f5; }
+    .checker-card.error { border-color: #bbb; background: #f9f9f9; }
+
+    .checker-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .checker-icon { font-size: 1.4rem; }
+    .checker-title { font-weight: 600; font-size: 0.9rem; }
+    .checker-status {
+      margin-left: auto; font-size: 0.75rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px; color: white;
+    }
+    .checker-card.passed .checker-status { background: #27ae60; }
+    .checker-card.warning .checker-status { background: #f39c12; }
+    .checker-card.critical .checker-status { background: #e74c3c; }
+    .checker-card.error .checker-status { background: #999; }
+
+    .checker-message { font-size: 0.9rem; color: #333; font-weight: 600; line-height: 1.6; margin-bottom: 8px; }
+    .checker-details { margin-bottom: 8px; }
+    .checker-details summary {
+      cursor: pointer; font-size: 0.8rem; font-weight: 600;
+      color: #4a90e2; margin-bottom: 6px; user-select: none;
+    }
+    .checker-details-body {
+      font-size: 0.8rem; color: #666; line-height: 1.7;
+      padding: 10px 12px; margin-top: 6px;
+      background: rgba(0,0,0,0.03); border-radius: 6px;
+    }
+    .checker-suggestion {
+      font-size: 0.8rem; color: #555; line-height: 1.7;
+      padding: 10px 12px; border-radius: 6px;
+      background: #eef6ff; border-left: 3px solid #4a90e2;
+    }
+    .checker-suggestion-label { font-weight: 700; color: #4a90e2; margin-bottom: 4px; font-size: 0.8rem; }
+
+    .warning-list { margin-top: 20px; }
+    .warning-item {
+      background: #fff3cd; border-left: 4px solid #ffc107;
+      padding: 10px 14px; border-radius: 0 8px 8px 0;
+      font-size: 0.85rem; margin-bottom: 8px; color: #664d03;
+    }
+
+    /* ── 탭4: 팀원 비교표 ──────────────────────────── */
+    .comparison-table { width: 100%; border-collapse: collapse; }
+    .comparison-table th {
+      background: #1a1a2e; color: white;
+      padding: 12px 14px; text-align: left; font-size: 0.82rem;
+      font-weight: 600; letter-spacing: 0.3px;
+    }
+    .comparison-table td { padding: 12px 14px; font-size: 0.85rem; border-bottom: 1px solid #f0f0f0; }
+    .comparison-table tr:hover td { background: #f8f9ff; }
+    .comparison-table tr.highlight td { background: #e8f0ff; }
+
+    .level-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.72rem; font-weight: 700;
+      background: #e8ecf0; color: #555;
+    }
+    .kpi-rate { font-weight: 700; }
+    .kpi-rate.high { color: #27ae60; }
+    .kpi-rate.mid { color: #f39c12; }
+    .kpi-rate.low { color: #e74c3c; }
+
+    /* ── 공통 유틸 ─────────────────────────────────── */
+    .empty-state { text-align: center; padding: 40px; color: #bbb; font-size: 0.9rem; }
+    .loading-dots::after { content: '...'; animation: dots 1.2s infinite; }
+    @keyframes dots { 0%,20% { content: '.'; } 40%,60% { content: '..'; } 80%,100% { content: '...'; } }
+
+    .section-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; color: #1a1a2e; }
+    .divider { border: none; border-top: 1px solid #f0f0f0; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div style="font-size:1.5rem">🤖</div>
+  </div>
+  <div>
+    <h1>HR 피드백 보조 AI</h1>
+    <div class="subtitle">AI개발팀 · 연간 성과 평가 지원 시스템</div>
+  </div>
+  <div style="margin-left:auto; font-size:0.8rem; opacity:0.6" id="session-info"></div>
+</header>
+
+<div class="container">
+
+  <!-- ── 직원 선택 ─────────────────────────────── -->
+  <div class="select-card" id="select-card">
+    <h2>📋 평가 대상 팀원을 선택하세요</h2>
+    <div class="emp-grid" id="emp-grid">
+      <div class="empty-state">직원 목록 로딩 중<span class="loading-dots"></span></div>
+    </div>
+    <button class="start-btn" id="start-btn" disabled onclick="startEvaluation()">
+      평가 시작
+    </button>
+  </div>
+
+  <!-- ── 진행 상황 ─────────────────────────────── -->
+  <div class="progress-card" id="progress-card">
+    <div class="section-title" id="progress-title">⏳ 평가 진행 중</div>
+    <div class="progress-steps">
+      <div class="step" id="step-1">
+        <div class="step-dot">1</div>
+        <div class="step-label">성과 요약</div>
+      </div>
+      <div class="step" id="step-2">
+        <div class="step-dot">2</div>
+        <div class="step-label">초안 생성</div>
+      </div>
+      <div class="step" id="step-3">
+        <div class="step-dot">3</div>
+        <div class="step-label">팀장 검토</div>
+      </div>
+      <div class="step" id="step-4">
+        <div class="step-dot">4</div>
+        <div class="step-label">품질 체크</div>
+      </div>
+      <div class="step" id="step-5">
+        <div class="step-dot">5</div>
+        <div class="step-label">비교뷰</div>
+      </div>
+    </div>
+    <div class="progress-log" id="progress-log"></div>
+  </div>
+
+  <!-- ── Human Gate 배너 ───────────────────────── -->
+  <div class="human-gate-banner" id="human-gate">
+    <h3>👤 초안 검토가 필요합니다</h3>
+    <p>AI가 생성한 피드백 초안을 검토하고 수정한 뒤 확인 버튼을 눌러주세요.<br>
+       탭2(피드백 초안)에서 내용을 직접 수정할 수 있습니다.</p>
+    <div class="gate-actions">
+      <button class="approve-btn" onclick="approveGate()">✅ 검토 완료 · 다음 단계 진행</button>
+    </div>
+  </div>
+
+  <!-- ── 결과 탭 ───────────────────────────────── -->
+  <div class="tabs-card" id="tabs-card">
+    <div class="tab-header">
+      <button class="tab-btn active" onclick="switchTab('summary')">📊 통합 요약</button>
+      <button class="tab-btn" onclick="switchTab('draft')" id="tab-draft-btn">✏️ 피드백 초안</button>
+      <button class="tab-btn" onclick="switchTab('quality')" id="tab-quality-btn">🔍 품질 체크</button>
+      <button class="tab-btn" onclick="switchTab('comparison')" id="tab-comparison-btn">📋 팀원 비교표</button>
+    </div>
+
+    <!-- 탭1: 통합 요약 -->
+    <div class="tab-panel active" id="panel-summary">
+      <div class="empty-state" id="summary-empty">
+        성과 요약을 불러오는 중<span class="loading-dots"></span>
+      </div>
+      <div id="summary-content" style="display:none">
+        <div class="section-title" id="summary-title"></div>
+        <div class="summary-grid" id="summary-boxes"></div>
+        <hr class="divider">
+        <div class="section-title">📅 분기별 타임라인</div>
+        <div class="timeline" id="timeline-list"></div>
+        <hr class="divider">
+        <div class="section-title">🎯 KPI 달성 현황</div>
+        <div class="kpi-bar-list" id="kpi-bars"></div>
+      </div>
+    </div>
+
+    <!-- 탭2: 피드백 초안 -->
+    <div class="tab-panel" id="panel-draft">
+      <div class="empty-state" id="draft-empty">
+        초안 생성을 기다리는 중<span class="loading-dots"></span>
+      </div>
+      <div id="draft-content" style="display:none">
+        <div class="grade-row" id="grade-row"></div>
+        <hr class="divider">
+        <div class="draft-section">
+          <h3>🏆 업적 피드백</h3>
+          <textarea class="draft-textarea" id="draft-achievement" placeholder="업적 피드백 초안"></textarea>
+        </div>
+        <div class="draft-section">
+          <h3>💡 역량 피드백</h3>
+          <textarea class="draft-textarea" id="draft-competency" placeholder="역량 피드백 초안"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div class="section-title" style="font-size:0.85rem">💪 강점</div>
+            <div class="tag-list" id="strengths-list"></div>
+          </div>
+          <div>
+            <div class="section-title" style="font-size:0.85rem">🌱 성장 기회</div>
+            <div class="tag-list" id="growth-list"></div>
+          </div>
+        </div>
+        <div id="recheck-area" style="display:none">
+          <button class="recheck-btn" id="recheck-btn" onclick="recheckQuality()">🔄 수정 내용으로 품질 재체크</button>
+          <div class="recheck-hint">품질 체크 탭의 경고·위험 내용을 참고해 위 초안을 수정한 뒤 클릭하면, 수정된 내용으로 품질 체크를 다시 실행합니다.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 탭3: 품질 체크 -->
+    <div class="tab-panel" id="panel-quality">
+      <div class="empty-state" id="quality-empty">
+        품질 체크를 기다리는 중<span class="loading-dots"></span>
+      </div>
+      <div id="quality-content" style="display:none">
+        <div class="checker-grid" id="checker-grid"></div>
+        <div class="warning-list" id="warning-list"></div>
+      </div>
+    </div>
+
+    <!-- 탭4: 팀원 비교표 -->
+    <div class="tab-panel" id="panel-comparison">
+      <div class="empty-state" id="comparison-empty">
+        비교표를 생성하는 중<span class="loading-dots"></span>
+      </div>
+      <div id="comparison-content" style="display:none">
+        <div id="team-highlights" style="background:#f0f6ff;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.88rem;line-height:1.6;color:#333"></div>
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>이름</th><th>직급</th><th>핵심 업무</th><th>주요 성과</th><th>KPI 달성률</th>
+            </tr>
+          </thead>
+          <tbody id="comparison-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ── 전역 상태 ────────────────────────────────────────────
+let selectedEmpId = null;
+let selectedEmpName = null;
+let sessionId = null;
+let ws = null;
+let pipelineRunning = false;
+const currentYear = 2025;
+
+// ── 초기화 ──────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadEmployees();
+});
+
+// ── 직원 목록 로딩 ──────────────────────────────────────
+async function loadEmployees() {
+  try {
+    const res = await fetch('/api/employees');
+    const data = await res.json();
+    renderEmployees(data.employees);
+  } catch (e) {
+    document.getElementById('emp-grid').innerHTML =
+      '<div class="empty-state" style="color:#e74c3c">직원 목록 로딩 실패: ' + e.message + '</div>';
+  }
+}
+
+function renderEmployees(employees) {
+  const grid = document.getElementById('emp-grid');
+  grid.innerHTML = employees.map(emp => `
+    <button class="emp-btn" onclick="selectEmployee('${emp.emp_id}', '${emp.name}', this)">
+      <span class="emp-level">${emp.level}</span>
+      <div class="emp-name">${emp.name}</div>
+      <div class="emp-role">${emp.role}</div>
+    </button>
+  `).join('');
+}
+
+function selectEmployee(empId, empName, btn) {
+  // 이전 선택 해제
+  document.querySelectorAll('.emp-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedEmpId = empId;
+  selectedEmpName = empName;
+  // 파이프라인 진행 중에는 다른 직원을 선택해도 시작 버튼을 활성화하지 않음
+  document.getElementById('start-btn').disabled = pipelineRunning;
+}
+
+// ── 화면을 새로고침 직후와 동일한 초기 상태로 초기화 ──────────
+function resetUI() {
+  ['summary', 'draft', 'quality', 'comparison'].forEach(tab => {
+    document.getElementById(`${tab}-content`).style.display = 'none';
+    document.getElementById(`${tab}-empty`).style.display = '';
+    const btn = document.querySelector(`[onclick="switchTab('${tab}')"]`);
+    const badge = btn.querySelector('.tab-badge');
+    if (badge) badge.remove();
+  });
+  switchTab('summary');
+
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById(`step-${i}`);
+    el.classList.remove('active', 'done', 'waiting');
+  }
+  document.getElementById('progress-title').textContent = '⏳ 평가 진행 중';
+  document.getElementById('progress-log').innerHTML = '';
+
+  document.getElementById('recheck-area').style.display = 'none';
+
+  hideHumanGate();
+}
+
+// ── 초안 수정 후 품질 재체크 ──────────────────────────────
+async function recheckQuality() {
+  if (!sessionId) return;
+
+  const btn = document.getElementById('recheck-btn');
+  btn.disabled = true;
+  btn.textContent = '재체크 중...';
+
+  const edits = {
+    achievement_feedback: document.getElementById('draft-achievement').value,
+    competency_feedback: document.getElementById('draft-competency').value,
+  };
+
+  try {
+    await fetch(`/api/recheck/${sessionId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({edits})
+    });
+    addLog('수정한 초안으로 품질 재체크 완료');
+    switchTab('quality');
+  } catch (e) {
+    addLog('품질 재체크 실패: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 수정 내용으로 품질 재체크';
+  }
+}
+
+// ── 평가 시작 ────────────────────────────────────────────
+async function startEvaluation() {
+  if (!selectedEmpId) return;
+
+  pipelineRunning = true;
+  document.getElementById('start-btn').disabled = true;
+  resetUI();
+
+  try {
+    const res = await fetch('/api/evaluate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({emp_id: selectedEmpId, year: currentYear})
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+
+    // 세션 정보 헤더 표시
+    document.getElementById('session-info').textContent = `세션: ${sessionId}`;
+
+    // 진행 카드와 탭 카드 표시
+    document.getElementById('progress-card').classList.add('visible');
+    document.getElementById('tabs-card').classList.add('visible');
+    setStep(1);
+
+    // WebSocket 연결
+    connectWebSocket(sessionId);
+    addLog(`${selectedEmpName}(${selectedEmpId}) 평가 파이프라인 시작`);
+  } catch (e) {
+    addLog('파이프라인 시작 실패: ' + e.message, 'error');
+    pipelineRunning = false;
+    document.getElementById('start-btn').disabled = false;
+  }
+}
+
+// ── WebSocket 연결 ───────────────────────────────────────
+function connectWebSocket(sid) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${sid}`);
+
+  ws.onopen = () => addLog('실시간 연결 완료');
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    handleWsMessage(msg);
+  };
+
+  ws.onerror = () => addLog('WebSocket 오류 발생', 'error');
+
+  ws.onclose = () => addLog('연결 종료');
+
+  // 30초마다 ping 전송 (연결 유지)
+  setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({type: 'ping'}));
+    }
+  }, 30000);
+}
+
+// ── WebSocket 이벤트 핸들러 ──────────────────────────────
+function handleWsMessage(msg) {
+  switch (msg.type) {
+    case 'agent_progress':
+      handleProgress(msg);
+      break;
+    case 'step_result':
+      handleStepResult(msg);
+      break;
+    case 'human_gate':
+      showHumanGate();
+      break;
+    case 'done':
+      handleDone();
+      break;
+    case 'error':
+      addLog('오류: ' + msg.message, 'error');
+      break;
+    case 'restore':
+      // 새로고침 시 기존 결과 복원
+      restoreResults(msg.results);
+      break;
+  }
+}
+
+function handleProgress(msg) {
+  addLog(msg.message);
+  const step = msg.step;
+  if (step === 'agent1_start') setStep(1);
+  else if (step === 'agent2_start') setStep(2);
+  else if (step === 'parallel_start') { setStep(4); setStep(5); }
+}
+
+function handleStepResult(msg) {
+  addLog(`✓ ${msg.message}`);
+  const step = msg.step;
+
+  if (step === 'summary') {
+    renderSummary(msg.data);
+    markTabReady('summary');
+    setStepDone(1);
+  } else if (step === 'draft') {
+    renderDraft(msg.data);
+    markTabReady('draft');
+    setStepDone(2);
+  } else if (step === 'quality') {
+    renderQuality(msg.data);
+    markTabReady('quality', msg.data.warning_count);
+    setStepDone(4);
+    document.getElementById('recheck-area').style.display = 'block';
+  } else if (step === 'comparison') {
+    renderComparison(msg.data);
+    markTabReady('comparison');
+    setStepDone(5);
+    // 팀원 비교표 표시까지 완료된 시점에 평가 시작 버튼을 다시 활성화
+    pipelineRunning = false;
+    document.getElementById('start-btn').disabled = false;
+  }
+}
+
+function handleDone() {
+  hideHumanGate();
+  setStepDone(3);
+  document.getElementById('progress-title').textContent = '✅ 평가 완료';
+  addLog('전체 파이프라인 완료!');
+}
+
+// ── 결과 복원 (새로고침) ─────────────────────────────────
+function restoreResults(results) {
+  if (results.summary) { renderSummary(results.summary); markTabReady('summary'); }
+  if (results.draft) { renderDraft(results.draft); markTabReady('draft'); }
+  if (results.quality) {
+    renderQuality(results.quality);
+    markTabReady('quality', results.quality.warning_count);
+    document.getElementById('recheck-area').style.display = 'block';
+  }
+  if (results.comparison) { renderComparison(results.comparison); markTabReady('comparison'); }
+  document.getElementById('progress-card').classList.add('visible');
+  document.getElementById('tabs-card').classList.add('visible');
+}
+
+// ── Human Gate ───────────────────────────────────────────
+function showHumanGate() {
+  document.getElementById('human-gate').classList.add('visible');
+  document.getElementById('step-3').classList.add('waiting');
+  setStep(3);
+  // 초안 탭으로 자동 전환
+  switchTab('draft');
+  addLog('⚠️ 팀장 검토 대기 중');
+}
+
+function hideHumanGate() {
+  document.getElementById('human-gate').classList.remove('visible');
+}
+
+async function approveGate() {
+  if (!sessionId) return;
+
+  // 팀장이 수정한 텍스트를 수집합니다.
+  const edits = {};
+  const achievement = document.getElementById('draft-achievement')?.value;
+  const competency = document.getElementById('draft-competency')?.value;
+  if (achievement) edits.achievement_feedback = achievement;
+  if (competency) edits.competency_feedback = competency;
+
+  try {
+    await fetch(`/api/approve/${sessionId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({edits})
+    });
+    hideHumanGate();
+    addLog('초안 승인 완료. 품질 체크 시작...');
+  } catch (e) {
+    addLog('승인 실패: ' + e.message, 'error');
+  }
+}
+
+// ── 탭 전환 ─────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById(`panel-${tab}`).classList.add('active');
+}
+
+function markTabReady(tab, warningCount) {
+  const btn = document.querySelector(`[onclick="switchTab('${tab}')"]`);
+  const badge = btn.querySelector('.tab-badge');
+  if (badge) badge.remove();
+
+  if (warningCount > 0) {
+    btn.insertAdjacentHTML('beforeend', `<span class="tab-badge">${warningCount}</span>`);
+  } else if (tab !== 'summary') {
+    btn.insertAdjacentHTML('beforeend', `<span class="tab-badge green">✓</span>`);
+  }
+}
+
+// ── 진행 단계 표시 ──────────────────────────────────────
+function setStep(n) {
+  const el = document.getElementById(`step-${n}`);
+  if (el && !el.classList.contains('done')) el.classList.add('active');
+}
+
+function setStepDone(n) {
+  const el = document.getElementById(`step-${n}`);
+  if (el) { el.classList.remove('active', 'waiting'); el.classList.add('done'); }
+}
+
+// ── 로그 출력 ────────────────────────────────────────────
+function addLog(msg, type = '') {
+  const log = document.getElementById('progress-log');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (type ? ' ' + type : '');
+  const time = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  line.textContent = `[${time}] ${msg}`;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── 탭1: 통합 요약 렌더링 ────────────────────────────────
+function renderSummary(data) {
+  document.getElementById('summary-empty').style.display = 'none';
+  document.getElementById('summary-content').style.display = 'block';
+
+  // 직원 이름 표시 (ID 대신 이름으로)
+  document.getElementById('summary-title').textContent =
+    `📊 ${selectedEmpName || data.emp_id} 님의 ${data.year || ''}년 통합 요약`;
+
+  // 업적/역량 요약 박스
+  document.getElementById('summary-boxes').innerHTML = `
+    <div class="summary-box">
+      <h4>🏆 업적 요약</h4>
+      <p>${data.achievement_summary || '-'}</p>
+    </div>
+    <div class="summary-box competency">
+      <h4>💡 역량 요약</h4>
+      <p>${data.competency_summary || '-'}</p>
+    </div>
+  `;
+
+  // 분기별 타임라인
+  const timeline = data.timeline || [];
+  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+  const timelineHtml = quarters.map(q => {
+    const qData = timeline.find(t => t.quarter === q);
+    if (!qData) {
+      return `<div class="timeline-item">
+        <div class="quarter-badge missing">${q}</div>
+        <div class="quarter-content"><h4>기록 없음</h4><p style="color:#bbb;font-size:0.82rem">1on1 면담 기록이 없는 분기입니다.</p></div>
+      </div>`;
+    }
+    const achievements = (qData.key_achievements || []).map(a => `<li>${a}</li>`).join('');
+    return `<div class="timeline-item">
+      <div class="quarter-badge">${q}</div>
+      <div class="quarter-content">
+        <h4>${qData.kpi_status || ''}</h4>
+        <ul>${achievements || '<li>-</li>'}</ul>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('timeline-list').innerHTML = timelineHtml;
+
+  // KPI 바 차트
+  const kpi = data.kpi_summary || {};
+  const highlights = (kpi.highlights || []).map(h =>
+    `<div class="kpi-bar-item">
+      <div class="kpi-bar-header"><span>${h}</span><span style="color:#27ae60">✓ 초과</span></div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill over" style="width:100%"></div></div>
+    </div>`
+  ).join('');
+  const concerns = (kpi.concerns || []).map(c =>
+    `<div class="kpi-bar-item">
+      <div class="kpi-bar-header"><span>${c}</span><span style="color:#e74c3c">⚠ 미달</span></div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill under" style="width:70%"></div></div>
+    </div>`
+  ).join('');
+
+  const rate = kpi.weighted_achievement_rate || 0;
+  document.getElementById('kpi-bars').innerHTML = `
+    <div class="kpi-bar-item">
+      <div class="kpi-bar-header"><b>가중 달성률</b><b style="color:${rate>=100?'#27ae60':'#f39c12'}">${rate}%</b></div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill ${rate>=100?'over':''}" style="width:${Math.min(rate,150)}%"></div></div>
+    </div>
+    ${highlights}${concerns}
+  `;
+}
+
+// ── 탭2: 피드백 초안 렌더링 ────────────────────────────
+function renderDraft(data) {
+  document.getElementById('draft-empty').style.display = 'none';
+  document.getElementById('draft-content').style.display = 'block';
+
+  // 추천 등급 배지
+  document.getElementById('grade-row').innerHTML = `
+    <div class="grade-badge">${data.suggested_grade || '-'}</div>
+    <div class="grade-rationale">${data.grade_rationale || ''}</div>
+  `;
+
+  // 편집 가능한 텍스트 영역
+  document.getElementById('draft-achievement').value = data.achievement_feedback || '';
+  document.getElementById('draft-competency').value = data.competency_feedback || '';
+
+  // 강점 태그
+  document.getElementById('strengths-list').innerHTML =
+    (data.strengths || []).map(s => `<span class="tag">${s}</span>`).join('');
+
+  // 성장 기회 태그
+  document.getElementById('growth-list').innerHTML =
+    (data.growth_areas || []).map(g => `<span class="tag growth">${g}</span>`).join('');
+}
+
+// ── 텍스트 내 줄바꿈/굵게(**) 표시를 HTML로 변환 ──────────────
+function formatCheckerText(text) {
+  if (!text) return '';
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+// ── 탭3: 품질 체크 렌더링 ──────────────────────────────
+function renderQuality(data) {
+  document.getElementById('quality-empty').style.display = 'none';
+  document.getElementById('quality-content').style.display = 'block';
+
+  const checkerMeta = {
+    recency_bias:   {icon: '📅', title: '근시성 편향'},
+    grade_comment:  {icon: '⭐', title: '등급-코멘트 일치'},
+    omission:       {icon: '🔎', title: '면담 내용 누락'},
+    wrong_person:   {icon: '👥', title: '타인 업무 혼재'},
+  };
+
+  const checkers = data.checkers || {};
+  document.getElementById('checker-grid').innerHTML = Object.entries(checkerMeta).map(([key, meta]) => {
+    const c = checkers[key] || {};
+    const severity = c.severity || 'ok';
+    const statusLabel = {ok:'통과', warning:'경고', critical:'위험', error:'오류'}[severity] || '확인';
+    return `<div class="checker-card ${c.passed ? 'passed' : severity}">
+      <div class="checker-header">
+        <span class="checker-icon">${meta.icon}</span>
+        <span class="checker-title">${meta.title}</span>
+        <span class="checker-status">${statusLabel}</span>
+      </div>
+      <div class="checker-message">${formatCheckerText(c.message) || '-'}</div>
+      ${c.details ? `<details class="checker-details">
+        <summary>상세 설명 보기</summary>
+        <div class="checker-details-body">${formatCheckerText(c.details)}</div>
+      </details>` : ''}
+      ${c.suggestion ? `<div class="checker-suggestion">
+        <div class="checker-suggestion-label">💬 개선 제안</div>
+        ${formatCheckerText(c.suggestion)}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  // 경고 목록
+  const warnings = data.warnings || [];
+  document.getElementById('warning-list').innerHTML = warnings.length
+    ? `<div class="section-title" style="margin-top:20px">⚠️ 경고 목록</div>` +
+      warnings.map(w => `<div class="warning-item">${w}</div>`).join('')
+    : '';
+}
+
+// ── 탭4: 팀원 비교표 렌더링 ─────────────────────────────
+function renderComparison(data) {
+  document.getElementById('comparison-empty').style.display = 'none';
+  document.getElementById('comparison-content').style.display = 'block';
+
+  document.getElementById('team-highlights').textContent =
+    '📌 ' + (data.team_highlights || '팀 하이라이트 정보 없음');
+
+  const members = data.members || [];
+  document.getElementById('comparison-tbody').innerHTML = members.map(m => {
+    const rate = m.kpi_achievement_rate || 0;
+    const rateClass = rate >= 110 ? 'high' : rate >= 90 ? 'mid' : 'low';
+    const isTarget = m.emp_id === selectedEmpId;
+    return `<tr class="${isTarget ? 'highlight' : ''}">
+      <td><b>${m.name || m.emp_id}</b>${isTarget ? ' <span style="background:#4a90e2;color:white;font-size:0.65rem;padding:1px 5px;border-radius:3px">현재</span>' : ''}</td>
+      <td><span class="level-chip">${m.level || '-'}</span></td>
+      <td>${m.one_line_summary || '-'}</td>
+      <td style="font-size:0.82rem;color:#555">${m.top_achievement || '-'}</td>
+      <td><span class="kpi-rate ${rateClass}">${rate ? rate + '%' : '-'}</span></td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

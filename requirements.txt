@@ -1,0 +1,31 @@
+# ============================================================
+# HR 피드백 보조 AI - 패키지 의존성 목록
+# ============================================================
+
+# Anthropic Claude API SDK - LLM 호출 및 tool_use 루프
+anthropic>=0.40.0
+
+# FastMCP - MCP 서버/클라이언트를 FastAPI 스타일로 간결하게 구현
+# 서버: @mcp.tool() 데코레이터, 클라이언트: Client(server)
+fastmcp>=2.0.0
+
+# FastAPI 웹 프레임워크 - 팀장 UI REST API 및 WebSocket 제공
+fastapi>=0.115.0
+
+# ASGI 서버 - uvicorn으로 FastAPI 구동 (standard: websockets 포함)
+uvicorn[standard]>=0.32.0
+
+# ChromaDB - 벡터 스토어 (RAG 임베딩 저장 및 유사도 검색)
+chromadb>=0.5.0
+
+# 문장 임베딩 모델 - ChromaDB 기본 임베딩 함수에서 사용 (all-MiniLM-L6-v2)
+sentence-transformers>=3.0.0
+
+# 환경변수 로딩 - .env 파일에서 API 키 로딩
+python-dotenv>=1.0.0
+
+# Jinja2 - FastAPI HTML 템플릿 렌더링 (index.html)
+jinja2>=3.1.0
+
+# 비동기 HTTP 클라이언트 (내부 통신 및 헬스체크용)
+httpx>=0.27.0
